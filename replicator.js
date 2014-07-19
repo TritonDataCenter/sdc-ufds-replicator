@@ -26,12 +26,6 @@ var parser = dashdash.createParser({
             help: 'Replicator config file'
         },
         {
-            names: ['ufdsFile', 'u'],
-            type: 'string',
-            default: path.join(__dirname, 'etc/config.json'),
-            help: 'UFDS config file'
-        },
-        {
             names: ['help', 'h'],
             type: 'bool',
             help: 'Print this help and exit.'
@@ -64,22 +58,6 @@ function loadConfig() {
         process.exit(1);
     }
 
-    try {
-        var ufdsConfig = JSON.parse(fs.readFileSync(parsed.ufdsFile, 'utf8'));
-        if (ufdsConfig.moray.version === undefined) {
-            console.error('Unable to find local ufds version.');
-            process.exit(1);
-        }
-        var localVersion = parseInt(ufdsConfig.moray.version, 10);
-        LOG.info({
-            version: localVersion
-        }, 'found local ufds version');
-        config.localUfdsVersion = localVersion;
-    } catch (e) {
-        console.error('Unable to parse ufds configuration file: ' + e.message);
-        process.exit(1);
-    }
-
     LOG.level(config.logLevel || 'info');
 
     LOG.debug(config, 'config processed');
@@ -95,18 +73,11 @@ function main() {
         log: LOG,
         ldapConfig: config.localUfds
     });
-    vasync.forEachPipeline({
-        func: function (item, cb) {
-            rep.addRemote(item, cb);
-        },
-        inputs: config.remotes
-    }, function (err, res) {
-        if (err) {
-            LOG.fatal({err: err}, 'unable to initialize remotes');
-            process.exit(1);
-        }
-        rep.start();
+    config.remotes.forEach(function (item) {
+        rep.addRemote(item);
     });
+
+    rep.start();
 
     process.on('SIGINT', function () {
         rep.destroy();
