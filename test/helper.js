@@ -117,7 +117,9 @@ function initializeSkeleton(url, cb) {
         vasync.forEachPipeline({
             inputs: skeleton,
             func: function (obj, callback) {
-                client.add(obj.dn, obj.attributes, function (err, res) {
+                var dn = obj.dn;
+                delete obj.dn;
+                client.add(dn, obj, function (err, res) {
                     callback(err);
                 });
             }
@@ -162,7 +164,6 @@ function cleanMoray(cb) {
 
 module.exports = {
     setup: function setup(cb) {
-
         vasync.pipeline({
             funcs: [
                 function (_, callback) {
@@ -178,7 +179,7 @@ module.exports = {
                 function (_, callback) {
                     createReplica(function (err, res) {
                         if (err) {
-                            return cb(err);
+                            return callback(err);
                         }
                         ufdsReplica = res;
                         initializeSkeleton(res.server.url, callback);
@@ -186,11 +187,18 @@ module.exports = {
                     });
                 }
             ]
-        }, cb);
+        }, function (err, res) {
+            if (err) {
+                return cb(err);
+            }
+            return cb(null, ufdsPrimary, ufdsReplica);
+        });
     },
     teardown: function teardown(cb) {
         destroyUFDS(ufdsPrimary);
         destroyUFDS(ufdsReplica);
         cleanMoray(cb);
-    }
+    },
+    LOG: LOG,
+    baseConfig: baseConfig()
 };

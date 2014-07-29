@@ -1,48 +1,36 @@
 [
     {
         "dn": "o=smartdc",
-        "attributes": {
-            "objectclass": ["organization"],
-            "o": "smartdc"
-        }
+        "objectclass": ["organization"],
+        "o": "smartdc"
     },
     {
         "dn": "ou=users, o=smartdc",
-        "attributes": {
-            "objectclass": ["organizationalUnit"],
-            "ou": "users"
-        }
+        "objectclass": ["organizationalUnit"],
+        "ou": "users"
     },
     {
         "dn": "ou=groups, o=smartdc",
-        "attributes": {
-            "objectclass": ["organizationalUnit"],
-            "ou": "groups"
-        }
+        "objectclass": ["organizationalUnit"],
+        "ou": "groups"
     },
     {
         "dn": "ou=keyapiprivkeys, o=smartdc",
-        "attributes": {
-            "objectclass": ["organizationalUnit"],
-            "ou": "keyapiprivkeys"
-        }
+        "objectclass": ["organizationalUnit"],
+        "ou": "keyapiprivkeys"
     },
     {
         "dn": "datacenter=macbook, o=smartdc",
-        "attributes": {
-            "objectclass": ["datacenter"],
-            "ou": "keyapiprivkeys",
-            "o": "smartdc",
-            "datacenter": "macbook",
-            "region": "coal",
-            "company": "Joyent Inc."
-        }
+        "objectclass": ["datacenter"],
+        "ou": "keyapiprivkeys",
+        "o": "smartdc",
+        "datacenter": "macbook",
+        "region": "coal",
+        "company": "Joyent Inc."
     },
     {
         "dn": "cn=replicator, datacenter=macbook, o=smartdc",
-        "attributes": {
-            "objectclass": ["sdcreplicator"],
-            "cn": "replicator"
-        }
+        "objectclass": ["sdcreplicator"],
+        "cn": "replicator"
     }
 ]
