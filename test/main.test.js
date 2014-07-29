@@ -45,8 +45,8 @@ test('initReplicator', function (t) {
         bindDN: dn,
         bindCredentials: passwd,
         queries: [
-            "/ou=users, o=smartdc??sub?" +
-                "(&(!(objectclass=amonprobe)(!(objectclass=amonprobegroup))))"
+            '/ou=users, o=smartdc??sub?' +
+                '(&(!(objectclass=amonprobe)(!(objectclass=amonprobegroup))))'
         ]
     });
     t.end();

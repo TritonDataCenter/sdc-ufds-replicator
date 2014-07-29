@@ -71,12 +71,12 @@ function createUFDS(config, cb) {
 
 function createPrimary(cb) {
     var config = baseConfig({
-        host: "127.0.0.1",
-        port: "1389",
+        host: '127.0.0.1',
+        port: '1389',
         changelog: {
             bucket: PRIMARY_CLOG_BUCKET
         },
-        "o=smartdc": {
+        'o=smartdc': {
             bucket: PRIMARY_BUCKET
         }
     });
@@ -86,12 +86,12 @@ function createPrimary(cb) {
 
 function createReplica(cb) {
     var config = baseConfig({
-        host: "127.0.0.1",
-        port: "1390",
+        host: '127.0.0.1',
+        port: '1390',
         changelog: {
             bucket: REPL_CLOG_BUCKET
         },
-        "o=smartdc": {
+        'o=smartdc': {
             bucket: REPL_BUCKET
         }
     });
@@ -172,8 +172,7 @@ module.exports = {
                             return callback(err);
                         }
                         ufdsPrimary = res;
-                        initializeSkeleton(res.server.url, callback);
-                        return;
+                        return initializeSkeleton(res.server.url, callback);
                     });
                 },
                 function (_, callback) {
@@ -182,8 +181,7 @@ module.exports = {
                             return callback(err);
                         }
                         ufdsReplica = res;
-                        initializeSkeleton(res.server.url, callback);
-                        return;
+                        return initializeSkeleton(res.server.url, callback);
                     });
                 }
             ]

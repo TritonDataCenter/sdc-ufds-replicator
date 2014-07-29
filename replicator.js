@@ -77,6 +77,9 @@ function main() {
         rep.addRemote(item);
     });
 
+    rep.on('caughtup', function (url, number) {
+        LOG.info({remoteUFDS: url, changenumber: number}, 'caughtup');
+    });
     rep.start();
 
     process.on('SIGINT', function () {
