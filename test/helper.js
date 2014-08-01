@@ -117,7 +117,6 @@ function initializeSkeleton(client, cb) {
     } catch (e) {
         cb(e);
     }
-    var config = baseConfig();
 
     vasync.forEachPipeline({
         inputs: skeleton,
@@ -203,7 +202,7 @@ module.exports = {
             return cb(null, ufdsPrimary, ufdsReplica);
         });
     },
-    teardown: function teardown(cb) {
+    teardown: function teardown(callback) {
         vasync.pipeline({
             funcs: [
                 function (_, cb) {
@@ -214,7 +213,7 @@ module.exports = {
                 }
             ]
         }, function (err, res) {
-            cleanMoray(cb);
+            cleanMoray(callback);
         });
     },
     LOG: LOG,

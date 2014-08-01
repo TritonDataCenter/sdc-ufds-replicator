@@ -187,12 +187,7 @@ test('del user/key', function (t) {
             missingEntry(user)
         ]
     }, function (err, res) {
-        //REPLICA.CLIENT.search('ou=users, o=smartdc', {scope: 'sub'}, function (err, res) {
-        //    res.on('searchEntry', function (entry) {
-        //        console.dir(entry.object);
-        //    });
-        //    res.on('end', t.end.bind(null, null));
-        //});
+        t.ifError(err);
         t.end();
     });
 });
