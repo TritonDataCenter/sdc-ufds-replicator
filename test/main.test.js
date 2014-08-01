@@ -1,12 +1,58 @@
 var test = require('tape').test;
+var vasync = require('vasync');
+var once = require('once');
 var helper = require('./helper');
 var replicator;
 
+
+///--- Globals
 
 var LOG = helper.LOG;
 var PRIMARY;
 var REPLICA;
 var REPL;
+
+
+///--- Fixture data
+var fixture = {};
+fixture.user = {
+    dn: 'uuid=a820621a-5007-4a2a-9636-edde809106de, ou=users, o=smartdc',
+    object: {
+        login: 'unpermixed',
+        uuid: 'a820621a-5007-4a2a-9636-edde809106de',
+        userpassword: 'FL8xhOFL8xhO',
+        email: 'postdisseizor@superexist.com',
+        cn: 'Judophobism',
+        sn: 'popgun',
+        company: 'butterflylike',
+        address: ['liltingly, Inc.',
+        '6165 pyrophyllite Street'],
+        city: 'benzoylation concoctive',
+        state: 'SP',
+        postalCode: '4967',
+        country: 'BAT',
+        phone: '+1 891 657 5818',
+        objectclass: 'sdcperson'
+    }
+};
+/* BEGIN JSSTYLED */
+fixture.key = {
+    dn: 'fingerprint=db:e1:88:bb:a9:ee:ab:be:2f:9c:5b:2f:d9:01:ac:d9, uuid=a820621a-5007-4a2a-9636-edde809106de, ou=users, o=smartdc',
+    object: {
+        name: 'flashlight',
+        fingerprint: 'db:e1:88:bb:a9:ee:ab:be:2f:9c:5b:2f:d9:01:ac:d9',
+        openssh: 'ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAIEA1UeAFVU5WaJJwe+rPjN7MbostuTX5P2NOn4c07ymxnFEHSH4LJZkVrMdVQRHf3uHLaTyIpCSZfm5onx0s2DoRpLreH0GYxRNNhmsfGcav0teeC6jSzHjJnn+pLnCDVvyunSFs5/AJGU27KPU4RRF7vNaccPUdB+q4nGJ1H1/+YE= tetartoconid@valvulotomy',
+        objectclass: 'sdckey'
+    }
+};
+/* END JSSTYLED */
+
+
+///--- Helpers
+
+function waitCaughtUp(_, cb) {
+    REPL.once('caughtup', cb.bind(null, null));
+}
 
 
 ///--- Tests
@@ -46,12 +92,110 @@ test('initReplicator', function (t) {
         bindCredentials: passwd,
         queries: [
             '/ou=users, o=smartdc??sub?' +
-                '(&(!(objectclass=amonprobe)(!(objectclass=amonprobegroup))))'
+                '(|(objectclass=sdcperson)(objectclass=sdckey))'
         ]
     });
-    t.end();
+    REPL.start();
+    REPL.once('caughtup', t.end.bind(null, null));
 });
 
+test('add user/key', function (t) {
+    var user = fixture.user;
+    var key = fixture.key;
+
+    function addEntry(dn, obj) {
+        return function (_, cb) {
+            PRIMARY.CLIENT.add(dn, obj, function (err) {
+                t.ifError(err);
+                cb(err);
+            });
+        };
+    }
+    function searchEntry(dn) {
+        return function (_, cb) {
+            cb = once(cb);
+            var opts = {scope: 'base'};
+            REPLICA.CLIENT.search(dn, opts, function (err, res) {
+                if (err) {
+                    t.ifError(err);
+                    return cb(err);
+                }
+                var count = 0;
+                res.on('searchEntry', function (entry) {
+                    t.ok(entry);
+                    count++;
+                });
+                res.on('end', function () {
+                    t.equal(count, 1);
+                    cb();
+                });
+                res.on('err', cb.bind(null));
+                return null;
+            });
+        };
+    }
+
+    vasync.pipeline({
+        funcs: [
+            addEntry(user.dn, user.object),
+            addEntry(key.dn, key.object),
+            waitCaughtUp,
+            searchEntry(user.dn),
+            searchEntry(key.dn)
+        ]
+    }, function (err, res) {
+        t.end();
+    });
+});
+
+test('del user/key', function (t) {
+    var user = fixture.user.dn;
+    var key = fixture.key.dn;
+
+    function delEntry(dn, obj) {
+        return function (_, cb) {
+            PRIMARY.CLIENT.del(dn, function (err) {
+                t.ifError(err);
+                cb(err);
+            });
+        };
+    }
+    function missingEntry(dn) {
+        return function (_, cb) {
+            cb = once(cb);
+            var opts = {scope: 'base'};
+            REPLICA.CLIENT.search(dn, opts, function (err, res) {
+                t.ifError(err);
+                res.once('error', function (sErr) {
+                    t.equal(sErr.name, 'NoSuchObjectError');
+                    cb();
+                });
+                res.once('end', function () {
+                    t.fail('entry not deleted');
+                    cb();
+                });
+            });
+        };
+    }
+
+    vasync.pipeline({
+        funcs: [
+            delEntry(key),
+            delEntry(user),
+            waitCaughtUp,
+            missingEntry(key),
+            missingEntry(user)
+        ]
+    }, function (err, res) {
+        //REPLICA.CLIENT.search('ou=users, o=smartdc', {scope: 'sub'}, function (err, res) {
+        //    res.on('searchEntry', function (entry) {
+        //        console.dir(entry.object);
+        //    });
+        //    res.on('end', t.end.bind(null, null));
+        //});
+        t.end();
+    });
+});
 
 test('closeReplicator', function (t) {
     REPL.destroy();

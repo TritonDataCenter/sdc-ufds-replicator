@@ -65,7 +65,18 @@ function createUFDS(config, cb) {
         cb(new Error('could not connect to moray'));
     });
     server.init(function () {
-        cb(null, server);
+        // Create an associated ldap client for tests
+        server.removeAllListeners('morayError');
+        var client = ldap.createClient({
+            url: server.server.url,
+            bindDN: config.rootDN,
+            bindCredentials: config.rootPassword,
+            log: LOG
+        });
+        client.once('connect', function () {
+            server.CLIENT = client;
+            cb(null, server);
+        });
     });
 }
 
@@ -99,7 +110,7 @@ function createReplica(cb) {
     createUFDS(config, cb);
 }
 
-function initializeSkeleton(url, cb) {
+function initializeSkeleton(client, cb) {
     var skeleton;
     try {
         skeleton = JSON.parse(fs.readFileSync(UFDS_SKELETON_FILE, 'utf8'));
@@ -108,31 +119,27 @@ function initializeSkeleton(url, cb) {
     }
     var config = baseConfig();
 
-    var client = ldap.createClient({
-        url: url,
-        bindDN: config.rootDN,
-        bindCredentials: config.rootPassword
-    });
-    client.on('connect', function () {
-        vasync.forEachPipeline({
-            inputs: skeleton,
-            func: function (obj, callback) {
-                var dn = obj.dn;
-                delete obj.dn;
-                client.add(dn, obj, function (err, res) {
-                    callback(err);
-                });
-            }
-        }, function (err, res) {
-            client.destroy();
-            cb(err);
-        });
+    vasync.forEachPipeline({
+        inputs: skeleton,
+        func: function (obj, callback) {
+            var dn = obj.dn;
+            delete obj.dn;
+            client.add(dn, obj, function (err, res) {
+                callback(err);
+            });
+        }
+    }, function (err, res) {
+        cb(err);
     });
 }
 
-function destroyUFDS(server) {
+function destroyUFDS(server, cb) {
     if (server) {
-        server.close();
+        server.CLIENT.destroy();
+        server.CLIENT.on('close', server.close.bind(server));
+        server.once('close', cb.bind(null, null));
+    } else {
+        cb();
     }
 }
 
@@ -167,12 +174,16 @@ module.exports = {
         vasync.pipeline({
             funcs: [
                 function (_, callback) {
+                    // If the buckets exist, blow them away
+                    cleanMoray(callback.bind(null, null));
+                },
+                function (_, callback) {
                     createPrimary(function (err, res) {
                         if (err) {
                             return callback(err);
                         }
                         ufdsPrimary = res;
-                        return initializeSkeleton(res.server.url, callback);
+                        return initializeSkeleton(res.CLIENT, callback);
                     });
                 },
                 function (_, callback) {
@@ -181,7 +192,7 @@ module.exports = {
                             return callback(err);
                         }
                         ufdsReplica = res;
-                        return initializeSkeleton(res.server.url, callback);
+                        return initializeSkeleton(res.CLIENT, callback);
                     });
                 }
             ]
@@ -193,9 +204,18 @@ module.exports = {
         });
     },
     teardown: function teardown(cb) {
-        destroyUFDS(ufdsPrimary);
-        destroyUFDS(ufdsReplica);
-        cleanMoray(cb);
+        vasync.pipeline({
+            funcs: [
+                function (_, cb) {
+                    destroyUFDS(ufdsPrimary, cb);
+                },
+                function (_, cb) {
+                    destroyUFDS(ufdsReplica, cb);
+                }
+            ]
+        }, function (err, res) {
+            cleanMoray(cb);
+        });
     },
     LOG: LOG,
     baseConfig: baseConfig()

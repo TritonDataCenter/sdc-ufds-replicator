@@ -27,7 +27,7 @@
     "faucet": "0.0.1",
     "istanbul": "0.3.0",
     "tape": "2.13.3",
-    "ufds-server": "git+ssh://git@git.joyent.com:ufds.git#1b69545bb4207eb145a65eccc87b625057822318",
+    "ufds-server": "git+ssh://git@git.joyent.com:ufds.git#919d0b88bb49606302eafd4e40047aac3bfc12a5",
     "moray": "git+ssh://git@git.joyent.com:node-moray.git#2b45e0"
   },
   "scripts": {
