@@ -7,9 +7,13 @@ var once = require('once');
 var ldap = require('ldapjs');
 var vasync = require('vasync');
 var bunyan = require('bunyan');
+var assert = require('assert-plus');
+var util = require('util');
+var libuuid = require('libuuid');
 
 var ufds = require('ufds-server');
 var moray = require('moray');
+var replicator = require('../lib/index');
 
 ///--- Globals
 var PRIMARY_BUCKET = 'test_ufds_pri';
@@ -80,36 +84,6 @@ function createUFDS(config, cb) {
     });
 }
 
-function createPrimary(cb) {
-    var config = baseConfig({
-        host: '127.0.0.1',
-        port: '1389',
-        changelog: {
-            bucket: PRIMARY_CLOG_BUCKET
-        },
-        'o=smartdc': {
-            bucket: PRIMARY_BUCKET
-        }
-    });
-    config.log = LOG.child({ufds: 'primary'});
-    createUFDS(config, cb);
-}
-
-function createReplica(cb) {
-    var config = baseConfig({
-        host: '127.0.0.1',
-        port: '1390',
-        changelog: {
-            bucket: REPL_CLOG_BUCKET
-        },
-        'o=smartdc': {
-            bucket: REPL_BUCKET
-        }
-    });
-    config.log = LOG.child({ufds: 'replica'});
-    createUFDS(config, cb);
-}
-
 function initializeSkeleton(client, cb) {
     var skeleton;
     try {
@@ -146,6 +120,9 @@ function cleanMoray(cb) {
     var config = baseConfig();
     config.moray.log = LOG.child({app: 'moray'});
     var client = moray.createClient(config.moray);
+    client.on('error', function (err) {
+        console.log(err);
+    });
     client.once('connect', function () {
         vasync.forEachParallel({
             inputs: [
@@ -166,18 +143,207 @@ function cleanMoray(cb) {
     });
 }
 
+function lastClog(client, callback) {
+    var data = {
+        url: client.url.href
+    };
+    vasync.pipeline({
+        funcs: [
+            function (_, cb) {
+                cb = once(cb);
+                var opts = {scope: 'base'};
+                client.search('cn=uuid', opts, function (err, res) {
+                    if (err) {
+                        return cb(err);
+                    }
 
+                    res.once('searchEntry', function (item) {
+                        data.uuid = item.object.uuid;
+                    });
+                    res.once('end', cb.bind(null, null));
+                    res.once('error', cb.bind(null));
+                });
+            },
+            function (_, cb) {
+                cb = once(cb);
+                var controls = [
+                    new ldap.ServerSideSortingRequestControl({
+                        value: {
+                            attributeType: 'changenumber',
+                            reverseOrder: true
+                        }
+                    })
+                ];
+                var opts = {
+                    scope: 'one',
+                    sizeLimit: 1,
+                    filter: '(changenumber>=0)'
+                };
+                client.search('cn=changelog', opts,
+                                controls, function (err, res) {
+                    if (err) {
+                        return cb(err);
+                    }
+                    res.once('searchEntry', function (item) {
+                        data.changenumber = parseInt(
+                            item.object.changenumber, 10);
+                    });
+                    res.once('end', cb.bind(null, null));
+                    res.once('error', cb.bind(null));
+                });
+            }
+        ]
+    }, function (err, res) {
+        callback(err, data);
+    });
+}
+
+function getCheckpoint(client, uuid, cb) {
+    cb = once(cb);
+    var opts = {
+        scope: 'sub',
+        filter: new ldap.AndFilter({
+            filters: [
+                new ldap.EqualityFilter({
+                    attribute: 'objectclass',
+                    value: 'sdcreplcheckpoint'
+                }),
+                new ldap.EqualityFilter({
+                    attribute: 'uuid',
+                    value: uuid
+                })
+            ]
+        })
+    };
+    client.search('o=smartdc', opts, function (err, res) {
+        if (err) {
+            return cb(err);
+        }
+        res.once('searchEntry', function (item) {
+            cb(null, {
+                dn: item.dn.toString(),
+                changenumber: item.object.changenumber
+            });
+        });
+        return null;
+    });
+}
+
+function setCheckpoint(client, opts, cb) {
+    assert.number(opts.changenumber);
+    assert.string(opts.uuid);
+    assert.string(opts.url);
+    var dn = util.format('uuid=%s, o=smartdc', opts.uuid);
+
+    // Create checkpiont if uuid is specified
+    if (opts.create) {
+        var obj = {
+            objectclass: ['sdcreplcheckpoint'],
+            uuid: opts.uuid,
+            changenumber: opts.changenumber,
+            url: opts.url,
+            query: []
+        };
+        client.add(dn, obj, cb.bind(null));
+    } else {
+        var change = new ldap.Change({
+            operation: 'replace',
+            modification: {
+                type: 'changenumber',
+                vals: [opts.changenumber]
+            }
+        });
+        client.modify(dn, change, cb.bind(null));
+    }
+}
+
+function syncCheckpoint(cb) {
+    var clog = {};
+    vasync.pipeline({
+        funcs: [
+            function (_, cb) {
+                lastClog(ufdsPrimary.CLIENT, function (err, data) {
+                    clog = data;
+                    cb(err);
+                });
+            },
+            function (_, cb) {
+                clog.create = true;
+                setCheckpoint(ufdsReplica.CLIENT, clog, cb);
+            }
+
+        ]
+    }, function (err, res) {
+        cb(err, clog.changenumber);
+    });
+}
+
+///--- DATA FIXTURING
+
+var FIXTURE = {};
+FIXTURE.USER = {
+    dn: 'uuid=a820621a-5007-4a2a-9636-edde809106de, ou=users, o=smartdc',
+    object: {
+        login: 'unpermixed',
+        uuid: 'a820621a-5007-4a2a-9636-edde809106de',
+        userpassword: 'FL8xhOFL8xhO',
+        email: 'postdisseizor@superexist.com',
+        cn: 'matching',
+        sn: 'popgun',
+        company: 'butterflylike',
+        address: ['liltingly, Inc.',
+        '6165 pyrophyllite Street'],
+        city: 'benzoylation concoctive',
+        state: 'SP',
+        postalCode: '4967',
+        country: 'BAT',
+        phone: '+1 891 657 5818',
+        objectclass: 'sdcperson'
+    }
+};
+/* BEGIN JSSTYLED */
+FIXTURE.KEY = {
+    dn: 'fingerprint=db:e1:88:bb:a9:ee:ab:be:2f:9c:5b:2f:d9:01:ac:d9, uuid=a820621a-5007-4a2a-9636-edde809106de, ou=users, o=smartdc',
+    object: {
+        name: 'matching',
+        fingerprint: 'db:e1:88:bb:a9:ee:ab:be:2f:9c:5b:2f:d9:01:ac:d9',
+        openssh: 'ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAIEA1UeAFVU5WaJJwe+rPjN7MbostuTX5P2NOn4c07ymxnFEHSH4LJZkVrMdVQRHf3uHLaTyIpCSZfm5onx0s2DoRpLreH0GYxRNNhmsfGcav0teeC6jSzHjJnn+pLnCDVvyunSFs5/AJGU27KPU4RRF7vNaccPUdB+q4nGJ1H1/+YE= tetartoconid@valvulotomy',
+        objectclass: 'sdckey'
+    }
+};
+/* END JSSTYLED */
 
 module.exports = {
     setup: function setup(cb) {
+        function recordUUID(instance, callback) {
+            lastClog(instance.CLIENT, function (err, res) {
+                if (err) {
+                    return callback(err);
+                }
+                instance.UUID = res.uuid;
+                callback(null);
+            });
+        }
+
         vasync.pipeline({
             funcs: [
                 function (_, callback) {
                     // If the buckets exist, blow them away
                     cleanMoray(callback.bind(null, null));
                 },
-                function (_, callback) {
-                    createPrimary(function (err, res) {
+                function createPrimary(_, callback) {
+                    var config = baseConfig({
+                        host: '127.0.0.1',
+                        port: '1389',
+                        changelog: {
+                            bucket: PRIMARY_CLOG_BUCKET
+                        },
+                        'o=smartdc': {
+                            bucket: PRIMARY_BUCKET
+                        }
+                    });
+                    config.log = LOG.child({ufds: 'primary'});
+                    createUFDS(config, function(err, res) {
                         if (err) {
                             return callback(err);
                         }
@@ -185,14 +351,31 @@ module.exports = {
                         return initializeSkeleton(res.CLIENT, callback);
                     });
                 },
-                function (_, callback) {
-                    createReplica(function (err, res) {
+                function createReplica(_, callback) {
+                    var config = baseConfig({
+                        host: '127.0.0.1',
+                        port: '1390',
+                        changelog: {
+                            bucket: REPL_CLOG_BUCKET
+                        },
+                        'o=smartdc': {
+                            bucket: REPL_BUCKET
+                        }
+                    });
+                    config.log = LOG.child({ufds: 'replica'});
+                    createUFDS(config, function (err, res) {
                         if (err) {
                             return callback(err);
                         }
                         ufdsReplica = res;
                         return initializeSkeleton(res.CLIENT, callback);
                     });
+                },
+                function primaryUUID(_, callback) {
+                    recordUUID(ufdsPrimary, callback);
+                },
+                function replicaUUID(_, callback) {
+                    recordUUID(ufdsReplica, callback);
                 }
             ]
         }, function (err, res) {
@@ -216,6 +399,42 @@ module.exports = {
             cleanMoray(callback);
         });
     },
+
+    // helpers
+    createReplicator: function createReplicator(queries, cb) {
+        var config = baseConfig();
+        var dn = config.rootDN;
+        var passwd = config.rootPassword;
+
+        var repl = new replicator.Replicator({
+            log: LOG.child({component: 'replicator'}),
+            ldapConfig: {
+                url: ufdsReplica.server.url,
+                bindDN: dn,
+                bindCredentials: passwd
+            }
+        });
+
+
+        repl.addRemote({
+            url: ufdsPrimary.server.url,
+            bindDN: dn,
+            bindCredentials: passwd,
+            queries: queries
+        });
+
+        repl.start();
+        repl.once('caughtup', cb.bind(null, repl));
+    },
+
+    lastClog: lastClog,
+
+    getCheckpoint: getCheckpoint,
+    setCheckpoint: setCheckpoint,
+    syncCheckpoint: syncCheckpoint,
+
+    uuid: libuuid.create,
     LOG: LOG,
-    baseConfig: baseConfig()
+    baseConfig: baseConfig(),
+    FIXTURE: FIXTURE
 };

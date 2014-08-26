@@ -21,17 +21,17 @@
     "dashdash": "1.6.0",
     "ldapjs": "git+ssh://git@github.com:mcavage/node-ldapjs.git#de16802a16faf56fedb95e1b8a9b3d80bd8cbc18",
     "once": "1.3.0",
-    "vasync": "1.5.0"
+    "vasync": "1.5.0",
+    "libuuid": "0.1.3"
   },
   "devDependencies": {
     "faucet": "0.0.1",
     "istanbul": "0.3.0",
     "tape": "2.13.3",
-    "ufds-server": "git+ssh://git@git.joyent.com:ufds.git#919d0b88bb49606302eafd4e40047aac3bfc12a5",
-    "moray": "git+ssh://git@git.joyent.com:node-moray.git#2b45e0"
+    "ufds-server": "git+ssh://git@git.joyent.com:ufds.git#b136198cf1438c5f44af47d6ea9e807a1a03f4b8",
+    "moray": "git+ssh://git@git.joyent.com:node-moray.git#ba4fe8f3c564ed0c2f2beb268c42e67b0b4011a3"
   },
   "scripts": {
-    "report": "./node_modules/.bin/istanbul report html && open ./coverage/lcov-report/index.html",
-    "test": "./node_modules/.bin/istanbul cover --print none test/test.js | ./node_modules/.bin/faucet"
+    "test": "node test/test.js | ./node_modules/.bin/faucet"
   }
 }

@@ -1,3 +1,5 @@
+// Copyright (c) 2014, Joyent, Inc. All rights reserved.
+
 var test = require('tape').test;
 var vasync = require('vasync');
 var once = require('once');
@@ -69,7 +71,6 @@ test('setup', function (t) {
         t.ok(repl);
         PRIMARY = pri;
         REPLICA = repl;
-        console.log('done');
         t.end();
     });
 });
@@ -98,6 +99,15 @@ test('initReplicator', function (t) {
     REPL.start();
     REPL.once('caughtup', t.end.bind(null, null));
 });
+
+
+// Initialization:
+// - equal versions
+// - master is newer
+// - create checkpoint
+// - query checkpoint
+// - upgrade checkpoint (?)
+
 
 test('add user/key', function (t) {
     var user = fixture.user;
@@ -144,6 +154,50 @@ test('add user/key', function (t) {
             searchEntry(key.dn)
         ]
     }, function (err, res) {
+        t.end();
+    });
+});
+
+test('mod user/key', function (t) {
+    // Change value of 'cn' field to 'changed'
+    function modEntry(dn, key, value) {
+        return function(_, cb) {
+            var mod = {
+                operation: 'replace',
+                modification: {
+                    type: key,
+                    vals: [value]
+                }
+            };
+            PRIMARY.CLIENT.modify(dn, mod, function (err) {
+                t.ifError(err);
+                cb(err);
+            });
+        };
+    }
+
+    function checkEntry(dn, key, value) {
+        return function (_, cb) {
+            cb = once(cb);
+            var opts = {scope: 'base'};
+            REPLICA.CLIENT.search(dn, opts, function (err, res) {
+                t.ifError(err);
+                res.once('error', cb.bind(null));
+                res.once('searchEntry', function (item) {
+                    t.equal(item.object[key], value);
+                    cb();
+                });
+            });
+        };
+    }
+    vasync.pipeline({
+        funcs: [
+            modEntry(fixture.user.dn, 'cn', 'changed'),
+            waitCaughtUp,
+            checkEntry(fixture.user.dn, 'cn', 'changed')
+        ]
+    }, function (err, res) {
+        t.ifError(err);
         t.end();
     });
 });
