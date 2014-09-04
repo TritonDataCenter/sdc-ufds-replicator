@@ -10,10 +10,9 @@
 
 # UFDS Replicator
 
-Repository: <git@git.joyent.com:eng.git>
-Browsing: <https://mo.joyent.com/eng>
-Who: Patrick Mooney
-Tickets/bugs: <https://devhub.joyent.com/jira/browse/CAPI>
+This repository is part of the Joyent SmartDataCenter project (SDC).  For
+contribution guidelines, issues, and general documentation, visit the main
+[SDC](http://github.com/joyent/sdc) project page.
 
 
 # Overview
@@ -26,19 +25,14 @@ objects from one or more master UFDS instances to a local replica instance.
 
 To run the boilerplate API server:
 
-    git clone git@git.joyent.com:ufds-replicator.git
-    cd ufds-replicator
+    git clone git@github.com:joyent/sdc-ufds-replicator.git
+    cd sdc-ufds-replicator
     git submodule update --init
     make all
     node replicator.js
 
-To update the guidelines, edit "docs/index.restdown" and run `make docs`
-to update "docs/index.html".
-
 Before commiting/pushing run `make prepush` and, if possible, get a code
 review.
-
-
 
 # Testing
 
