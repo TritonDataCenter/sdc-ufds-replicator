@@ -162,7 +162,8 @@ function lastClog(client, callback) {
                 var opts = {scope: 'base'};
                 client.search('cn=uuid', opts, function (err, res) {
                     if (err) {
-                        return cb(err);
+                        cb(err);
+                        return;
                     }
 
                     res.once('searchEntry', function (item) {
@@ -190,7 +191,8 @@ function lastClog(client, callback) {
                 client.search('cn=changelog', opts,
                                 controls, function (err, res) {
                     if (err) {
-                        return cb(err);
+                        cb(err);
+                        return;
                     }
                     res.once('searchEntry', function (item) {
                         data.changenumber = parseInt(
@@ -269,15 +271,15 @@ function syncCheckpoint(cb) {
     var clog = {};
     vasync.pipeline({
         funcs: [
-            function (_, cb) {
+            function (_, callback) {
                 lastClog(ufdsPrimary.CLIENT, function (err, data) {
                     clog = data;
-                    cb(err);
+                    callback(err);
                 });
             },
-            function (_, cb) {
+            function (_, callback) {
                 clog.create = true;
-                setCheckpoint(ufdsReplica.CLIENT, clog, cb);
+                setCheckpoint(ufdsReplica.CLIENT, clog, callback);
             }
 
         ]
@@ -325,11 +327,10 @@ module.exports = {
     setup: function setup(cb) {
         function recordUUID(instance, callback) {
             lastClog(instance.CLIENT, function (err, res) {
-                if (err) {
-                    return callback(err);
+                if (!err) {
+                    instance.UUID = res.uuid;
                 }
-                instance.UUID = res.uuid;
-                callback(null);
+                callback(err);
             });
         }
 
@@ -351,7 +352,7 @@ module.exports = {
                         }
                     });
                     config.log = LOG.child({ufds: 'primary'});
-                    createUFDS(config, function(err, res) {
+                    createUFDS(config, function (err, res) {
                         if (err) {
                             return callback(err);
                         }

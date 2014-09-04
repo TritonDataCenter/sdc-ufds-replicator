@@ -169,7 +169,7 @@ test('add user/key', function (t) {
 test('mod user/key', function (t) {
     // Change value of 'cn' field to 'changed'
     function modEntry(dn, key, value) {
-        return function(_, cb) {
+        return function (_, cb) {
             var mod = {
                 operation: 'replace',
                 modification: {
