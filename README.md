@@ -8,7 +8,7 @@
     Copyright (c) 2014, Joyent, Inc.
 -->
 
-# UFDS Replicator
+# SDC-UFDS-Replicator
 
 This repository is part of the Joyent SmartDataCenter project (SDC).  For
 contribution guidelines, issues, and general documentation, visit the main
