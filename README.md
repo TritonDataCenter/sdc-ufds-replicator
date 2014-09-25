@@ -25,8 +25,6 @@ objects from one or more master UFDS instances to a local replica instance.
 
 To run the boilerplate API server:
 
-    git clone git@github.com:joyent/sdc-ufds-replicator.git
-    cd sdc-ufds-replicator
     git submodule update --init
     make all
     node replicator.js
