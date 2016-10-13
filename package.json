@@ -29,7 +29,7 @@
     "istanbul": "0.3.0",
     "tape": "2.13.3",
     "ufds-server": "git+ssh://git@github.com:joyent/sdc-ufds.git#b136198cf1438c5f44af47d6ea9e807a1a03f4b8",
-    "moray": "git+ssh://git@github.com:joyent/node-moray.git#master"
+    "moray": "git+ssh://git@github.com:joyent/node-moray.git#fd5781bc25a9bfe2ba82167664639753fb9f0ca5"
   },
   "scripts": {
     "test": "node test/test.js | ./node_modules/.bin/faucet"
